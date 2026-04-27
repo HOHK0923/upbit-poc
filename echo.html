@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Echo Page</title><style>body{font-family:sans-serif;background:#222;color:#fff;padding:20px;}</style></head>
+<body>
+<h1>🎯 Echo Page</h1>
+<p>이 페이지가 mobile app WebView 안에서 열렸으면 — <strong>whitelist 우회 가능성</strong>.</p>
+<p>Browser 외부에서 열렸으면 mediator가 외부 위임 (정상).</p>
+<pre id="info"></pre>
+<script>
+document.getElementById('info').textContent = JSON.stringify({
+  url: location.href,
+  ua: navigator.userAgent,
+  referrer: document.referrer,
+  has_Upbit: typeof window.Upbit !== 'undefined',
+  has_Upbit_postMessageToApp: typeof window.Upbit !== 'undefined' && typeof window.Upbit.postMessageToApp === 'function',
+  ts: new Date().toISOString()
+}, null, 2);
+</script>
+</body></html>
